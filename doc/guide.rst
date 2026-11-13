@@ -16,6 +16,8 @@ Joblib-spark provides a spark backend, before using it, we need register it firs
 Then we can use spark backend to run joblib tasks parallelly like::
 
     >>> from joblib.parallel import Parallel, delayed, parallel_backend
+    >>> def inc(x):
+    ...     return x + 1
     >>> with parallel_backend('spark') as (ba, _):
     ...     Parallel(n_jobs=5)(delayed(inc)(i) for i in range(3))
     [1, 2, 3]
@@ -27,7 +29,7 @@ Use joblib spark backend in scikit-learn
 If you install scikit-learn with version >= 0.21, then scikit-learn can use this
 spark backend::
 
-    >>> from sklearn.utils import parallel_backend
+    >>> from joblib import parallel_backend
     >>> from sklearn.model_selection import cross_val_score
     >>> from sklearn import datasets
     >>> from sklearn import svm

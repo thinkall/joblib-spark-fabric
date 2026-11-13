@@ -18,22 +18,13 @@ import logging
 from time import sleep
 import pytest
 import os
-from packaging.version import Version, parse
-import sklearn
+from packaging.version import Version
 import unittest
 
-if parse(sklearn.__version__) < Version('0.21'):
-    raise RuntimeError("Test requires sklearn version >=0.21")
-else:
-    from joblib.parallel import Parallel, delayed, parallel_backend
+from joblib import Parallel, delayed, parallel_backend
 
 from joblibspark import register_spark
 import joblibspark.backend
-
-from sklearn.utils import parallel_backend
-from sklearn.model_selection import cross_val_score
-from sklearn import datasets
-from sklearn import svm
 
 from pyspark.sql import SparkSession
 import pyspark
@@ -44,9 +35,9 @@ _logger.setLevel(logging.INFO)
 joblibspark.backend._DEFAULT_N_JOBS_IN_SPARK_CONNECT_MODE = 2
 
 
-spark_version = os.environ["PYSPARK_VERSION"]
+spark_version = os.environ.get("PYSPARK_VERSION", pyspark.__version__)
 
-is_spark_connect_mode = os.environ["TEST_SPARK_CONNECT"].lower() == "true"
+is_spark_connect_mode = os.environ.get("TEST_SPARK_CONNECT", "false").lower() == "true"
 
 if Version(spark_version).major >= 4:
     spark_connect_jar = ""
@@ -100,11 +91,17 @@ class TestSparkCluster(unittest.TestCase):
             seq = Parallel(n_jobs=2)(delayed(inc)(i) for i in range(2))
             assert seq == [inc(i) for i in range(2)]
 
-        with pytest.raises(BaseException):
-            Parallel(n_jobs=5)(delayed(slow_raise_value_error)(i == 3)
-                               for i in range(10))
+            with Parallel(n_jobs=2) as parallel:
+                with pytest.raises(Exception, match="condition evaluated to True"):
+                    parallel(delayed(slow_raise_value_error)(i == 3) for i in range(10))
+                assert parallel(delayed(inc)(i) for i in range(2)) == [1, 2]
 
     def test_sklearn_cv(self):
+        pytest.importorskip("sklearn")
+        from sklearn.model_selection import cross_val_score
+        from sklearn import datasets
+        from sklearn import svm
+
         iris = datasets.load_iris()
         clf = svm.SVC(kernel='linear', C=1)
         with parallel_backend('spark', n_jobs=3):
@@ -133,14 +130,14 @@ class TestSparkCluster(unittest.TestCase):
         def test_fn(x):
             if x == 0:
                 # make the task-0 fail, then it will cause task 1/2/3 to be canceled.
-                raise RuntimeError()
+                raise RuntimeError("cancel sibling task")
             else:
                 time.sleep(15)
                 # if the task finished successfully, it will write a flag file to tmp dir.
                 with open(os.path.join(tmp_dir, str(x)), 'w'):
                     pass
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="cancel sibling task"):
             with parallel_backend('spark', n_jobs=2):
                 Parallel()(delayed(test_fn)(i) for i in range(2))
 

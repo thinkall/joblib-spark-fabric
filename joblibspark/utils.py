@@ -30,6 +30,7 @@ def get_spark_session():
 
     spark_session = SparkSession.getActiveSession()
     if spark_session is None:
+        # pylint: disable=no-member
         spark_session = SparkSession \
             .builder \
             .appName("JoblibSparkBackend") \

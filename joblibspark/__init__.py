@@ -16,9 +16,11 @@
 #
 
 """
-Joblib spark backend is a extension for joblib, which make joblib running on spark parallelly.
+Independently maintained Spark backend for joblib, distributed as joblibspark-fabric.
+
+Fork modifications are documented in CHANGES.rst.
 """
-__version__ = '0.6.0'
+__version__ = '0.7.0'
 
 
 def register_spark():
@@ -28,10 +30,14 @@ def register_spark():
     try:
         from .backend import register # pylint: disable=C0415
         register()
-    except ImportError:
-        msg = ("To use the spark.distributed backend you must install "
-               "the pyspark and packages.\n\n")
-        raise ImportError(msg)  # pylint: disable=raise-missing-from
+    except ImportError as exc:
+        if not isinstance(exc, ModuleNotFoundError) or exc.name not in ("pyspark", "py4j"):
+            raise
+        msg = (f"Spark dependencies are unavailable: {exc}. "
+               "In a standalone environment, install 'joblibspark-fabric[spark]' "
+               "or 'joblibspark-fabric[connect]' for Spark Connect. "
+               "Do not replace the provided PySpark installation in managed runtimes.")
+        raise ImportError(msg) from exc
 
 
 __all__ = ['register_spark']

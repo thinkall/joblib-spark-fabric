@@ -28,17 +28,6 @@ from packaging.version import Version, parse
 from joblib.parallel \
     import AutoBatchingMixin, ParallelBackendBase, register_parallel_backend, SequentialBackend
 
-try:
-    # joblib >=1.4.0
-    from joblib._utils import _TracebackCapturingWrapper as SafeFunction
-except ImportError:
-    try:
-        from joblib._parallel_backends import SafeFunction
-    except ImportError:
-        # joblib >= 1.3.0
-        from joblib._parallel_backends import PoolManagerMixin
-        SafeFunction = None
-
 from py4j.clientserver import ClientServer
 
 import pyspark
@@ -234,14 +223,21 @@ class SparkDistributedBackend(ParallelBackendBase, AutoBatchingMixin):
 
     def abort_everything(self, ensure_ready=True):
         self._cancel_all_jobs()
+        if self._pool is not None:
+            # Stop stale batch callbacks before a managed Parallel instance is reused.
+            atexit.unregister(self._pool.close)
+            self._pool.terminate()
+            self._pool = None
         if ensure_ready:
+            backend_args = getattr(self.parallel, "_backend_kwargs",
+                                   getattr(self.parallel, "_backend_args", {}))
             self.configure(n_jobs=self.parallel.n_jobs, parallel=self.parallel,
-                           **self.parallel._backend_args)  # pylint: disable=W0212
+                           **backend_args)
 
     def terminate(self):
         self._cancel_all_jobs()
 
-    def configure(self, n_jobs=1, parallel=None, prefer=None, require=None, **backend_args):
+    def configure(self, n_jobs=1, parallel=None, prefer=None, require=None, **_backend_args):
         n_jobs = self.effective_n_jobs(n_jobs)
         self._n_jobs = n_jobs
         self.parallel = parallel  # pylint: disable=attribute-defined-outside-init
@@ -269,6 +265,10 @@ class SparkDistributedBackend(ParallelBackendBase, AutoBatchingMixin):
 
             self._ipython.events.register("post_run_cell", on_post_run_cell)
 
+    def submit(self, func, callback=None):
+        """Submit a batch using joblib's current backend interface."""
+        return self.apply_async(func, callback=callback)
+
     def apply_async(self, func, callback=None):
         # Note the `func` args is a batch here. (BatchedCalls type)
         # See joblib.parallel.Parallel._dispatch
@@ -276,6 +276,11 @@ class SparkDistributedBackend(ParallelBackendBase, AutoBatchingMixin):
         def run_on_worker_and_fetch_result():
             if not self._is_running:
                 raise RuntimeError('The task is canceled due to ipython command canceled.')
+
+            if self._is_spark_connect_mode and Version(pyspark.__version__).release < (4, 1):
+                # Spark 4.0's public wrapper propagates tags, but not the active session.
+                # pylint: disable=protected-access
+                self._spark._set_default_and_active_session(self._spark)
 
             # TODO: handle possible spark exception here. # pylint: disable=fixme
             if self._is_spark_connect_mode:
@@ -337,67 +342,26 @@ class SparkDistributedBackend(ParallelBackendBase, AutoBatchingMixin):
 
             return cloudpickle.loads(ser_res)
 
-        try:
-            if Version(pyspark.__version__).major >= 4 and is_spark_connect_mode():
-                # pylint: disable=fixme
-                # TODO: remove this patch once Spark 4.0.0 is released.
-                #  the patch is for propagating the Spark session to current thread.
-                def inheritable_thread_target(f):  # pylint: disable=invalid-name
-                    import functools  # pylint: disable=C0415
-                    import copy  # pylint: disable=C0415
-                    from typing import Any  # pylint: disable=C0415
-
-                    session = f
-                    assert session is not None, "Spark Connect session must be provided."
-
-                    def outer(ff: Any) -> Any:  # pylint: disable=invalid-name
-                        session_client_thread_local_attrs = [
-                            # type: ignore[union-attr]
-                            (attr, copy.deepcopy(value))
-                            for (
-                                attr,
-                                value,
-                            ) in session.client.thread_local.__dict__.items()
-                        ]
-
-                        @functools.wraps(ff)
-                        def inner(*args: Any, **kwargs: Any) -> Any:
-                            # Propagates the active spark session to the current thread
-                            # pylint: disable=C0415
-                            from pyspark.sql.connect.session import SparkSession as SCS
-
-                            # pylint: disable=protected-access,no-member
-                            SCS._set_default_and_active_session(session)
-
-                            # Set thread locals in child thread.
-                            for attr, value in session_client_thread_local_attrs:
-                                # type: ignore[union-attr]
-                                setattr(session.client.thread_local, attr, value)
-                            return ff(*args, **kwargs)
-
-                        return inner
-
-                    return outer
-
-                inheritable_thread_target = inheritable_thread_target(self._spark)
-            else:
-                # pylint: disable=no-name-in-module
-                from pyspark import inheritable_thread_target  # pylint: disable=C0415
-
+        from pyspark import inheritable_thread_target  # pylint: disable=C0415
+        if self._is_spark_connect_mode or (
+                Version(pyspark.__version__).major >= 4 and self._spark_pinned_threads_enabled):
+            run_on_worker_and_fetch_result = \
+                inheritable_thread_target(self._spark)(run_on_worker_and_fetch_result)
+        else:
             run_on_worker_and_fetch_result = \
                 inheritable_thread_target(run_on_worker_and_fetch_result)
-        except ImportError:
-            pass
 
-        if SafeFunction is None:
-            # pylint: disable=protected-access,used-before-assignment
-            return self._get_pool().apply_async(
-                PoolManagerMixin._wrap_func_call, (run_on_worker_and_fetch_result,),
-                callback=callback, error_callback=callback
-            )
+        def run_with_error_capture():
+            try:
+                return run_on_worker_and_fetch_result()
+            except BaseException as exc:  # pylint: disable=broad-exception-caught
+                if isinstance(exc, Exception):
+                    raise
+                # ThreadPool otherwise loses the result when its worker exits.
+                raise RuntimeError("Spark batch was interrupted") from exc
 
         return self._get_pool().apply_async(
-            SafeFunction(run_on_worker_and_fetch_result),
+            run_with_error_capture,
             callback=callback, error_callback=callback
         )
 

@@ -1,4 +1,4 @@
-joblib>=0.14,<=1.5.3
-packaging<=26.0
-pandas<3
+joblib>1.0
+packaging
+pandas>=2.2
 

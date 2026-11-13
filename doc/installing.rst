@@ -1,77 +1,37 @@
-Installing joblib
-===================
+Installing joblibspark-fabric
+=============================
 
-Using `pip`
+``joblibspark-fabric`` is an independently maintained fork of joblib-spark.
+The Python import namespace remains ``joblibspark``.
+
+Requirements
 ------------
 
-`joblibspark` requires Python 3.6+, `joblib>=0.14` and `pyspark>=2.4.0` to run.
-* Note: For spark version < 3, pyspark cancelling job API has bugs, so we could
-  not terminate running spark jobs correctly. See
-  https://issues.apache.org/jira/browse/SPARK-31549 for reference.
-  So we recommend to install spark 3.0 which addressed this issue.
+Use Python 3.11-3.14 and a compatible PySpark release from 3.5 through 4.3.0.
+PySpark 3.5 supports Python 3.11 within this range; PySpark 4.0 supports
+Python 3.11-3.13; PySpark 4.1-4.3 supports Python 3.11-3.14.
+Spark Connect requires PySpark 4.0 or newer.
 
-* To install `joblibspark`, run::
+Installation
+------------
 
-    pip install joblibspark
+Do not install the original ``joblibspark`` distribution alongside this fork,
+because both distributions own the same Python package. Migrate with::
 
-  You may need to run the above command as administrator
+    python -m pip uninstall joblibspark
+    python -m pip install joblibspark-fabric
 
-  On a unix environment, it is better to install outside of the hierarchy
-  managed by the system::
+PySpark is not installed or replaced by the base installation, so managed Spark
+environments keep their existing runtime. For a standalone environment, use::
 
-    pip install --prefix /usr/local joblibspark
+    python -m pip install "joblibspark-fabric[spark]"
 
-  Installing only for a specific user is easy if you use Python 2.7 or
-  above::
+For Spark Connect and its optional dependencies, use::
 
-    pip install --user joblibspark
+    python -m pip install "joblibspark-fabric[connect]"
 
-* The installation above does not install PySpark because for most users,
-  PySpark is already installed. If you do not have PySpark installed, you can
-  install `pyspark` together with `joblibspark`::
+The existing API is unchanged::
 
-    pip install pyspark>=3.0.0 joblibspark
+    from joblibspark import register_spark
 
-* If you want to use `joblibspark` with `scikit-learn`, please install `scikit-learn>=0.21`::
-
-    pip install scikit-learn>=0.21
-
-Using distributions
---------------------
-
-Joblibspark is packaged for several linux distribution: archlinux, debian,
-ubuntu, altlinux, and fedora. For minimum administration overhead, using the
-package manager is the recommended installation strategy on these
-systems.
-
-The manual way
----------------
-
-To install joblibspark first download the latest tarball (follow the link on
-the bottom of http://pypi.python.org/pypi/joblib) and expand it.
-
-Installing in a local environment
-..................................
-
-If you don't need to install for all users, we strongly suggest that you
-create a local environment and install `joblibspark` in it. One of the pros of
-this method is that you never have to become administrator, and thus all
-the changes are local to your account and easy to clean up.
-Simply move to the directory created by expanding the `joblibspark` tarball
-and run the following command::
-
-    python setup.py install --user
-
-Installing for all users
-........................
-
-If you have administrator rights and want to install for all users, all
-you need to do is to go in directory created by expanding the `joblibspark`
-tarball and run the following line::
-
-    python setup.py install
-
-If you are under Unix, we suggest that you install in '/usr/local' in
-order not to interfere with your system::
-
-    python setup.py install --prefix /usr/local
+    register_spark()
