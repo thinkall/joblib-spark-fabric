@@ -31,6 +31,10 @@ services:
 
   worker:
     <<: *node
+    environment:
+      SPARK_WORKER_OPTS: >-
+        -Dspark.worker.resource.gpu.amount=2
+        -Dspark.worker.resource.gpu.discoveryScript=/tests/discover_simulated_gpus.sh
     depends_on:
       master:
         condition: service_healthy
@@ -41,7 +45,7 @@ services:
         export SPARK_LOCAL_IP="$$(python -c 'import socket; print(socket.gethostbyname(socket.gethostname()))')"
         export SPARK_LOCAL_HOSTNAME="$$SPARK_LOCAL_IP"
         exec /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker \
-          --host "$$SPARK_LOCAL_IP" --cores 1 --memory 1g spark://master:7077
+          --host "$$SPARK_LOCAL_IP" --cores 2 --memory 1g spark://master:7077
 
   connect:
     <<: *node
@@ -62,11 +66,15 @@ services:
       - --conf
       - spark.connect.grpc.binding.address=0.0.0.0
       - --conf
-      - spark.cores.max=3
+      - spark.cores.max=6
       - --conf
-      - spark.executor.cores=1
+      - spark.executor.cores=2
       - --conf
       - spark.executor.memory=1g
+      - --conf
+      - spark.executor.resource.gpu.amount=2
+      - --conf
+      - spark.executor.resource.gpu.discoveryScript=/tests/discover_simulated_gpus.sh
       - --conf
       - spark.dynamicAllocation.enabled=false
       - --conf

@@ -78,17 +78,35 @@ To run Connect tests, set `TEST_SPARK_CONNECT=true`.
 ### Containerized cluster tests
 
 An additional CI job runs one standalone master, three worker containers (one
-single-core executor per worker), and a separate driver. Connect tests also use
+two-core executor per worker), and a separate driver. Connect tests also use
 a separate Spark Connect server container. Tests require tasks to rendezvous
 across three distinct executor hostnames, check driver filesystem isolation,
 perform a cross-worker shuffle, and verify joblib failure recovery.
 
+The suite covers the exported `register_spark()` API and the supported Spark
+backend usage surface, rather than only checking that Spark can run tasks:
+
+| API or behavior | Container coverage |
+| --- | --- |
+| Registration and backend selection | Repeated registration, `Parallel(backend="spark")`, backend instances, `parallel_backend`, and `parallel_config` |
+| Job sizing and batching | Explicit/context positive concurrency limits, default `n_jobs`, `-1`, ordered batches, closures, keyword arguments, empty input, and successful reuse |
+| Task resource options | `num_cpus_per_spark_task` (1 and 2), `num_gpus_per_spark_task` (0, 1, and 2 simulated GPUs), checked inside executor tasks |
+| Nested joblib calls | Sequential execution inside the original executor process, thread, and Spark task |
+| Spark context inheritance | Classic local properties and Connect tags reach executor tasks |
+| scikit-learn integration | `cross_val_score` with scoring verified on executors |
+| Failure handling | Running-sibling cancellation, error propagation, and managed `Parallel` reuse after failure |
+
+Joblib's intentional sequential fallback for `n_jobs=1` (or an unset job count
+without a context override) is checked on the driver, not misreported as distributed
+execution. Internal backend hooks are exercised through these user calls; this is
+not a claim to implement every option of every joblib backend.
+
 Container CI covers Python 3.13 with Spark 4.0.0 and Python 3.14 with Spark 4.2.0
 and 4.3.0, in both modes. All containers share one GitHub runner, so this verifies
-container/network isolation,
-not separate physical machines or real GPU computation. The existing
-`TestSimulatedGPUResources` tests use synthetic GPU addresses and only verify
-Spark resource scheduling; they do not require or test GPU hardware.
+container/network isolation, not separate physical machines or real GPU computation.
+Workers advertise two synthetic GPU addresses solely to test resource scheduling.
+Like the existing `TestSimulatedGPUResources` tests, these checks do not require
+or test GPU hardware.
 
 With Docker Compose installed, run the classic minimum-runtime case with:
 
