@@ -16,7 +16,7 @@
 import sys
 import os
 
-import joblib
+import joblibspark
 
 # If your extensions are in another directory, add it here. If the directory
 # is relative to the documentation root, use os.path.abspath to make it
@@ -68,7 +68,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'joblib'
+project = 'joblibspark-fabric'
 copyright = '2008-2018, Joblib developers'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -76,7 +76,7 @@ copyright = '2008-2018, Joblib developers'
 # built documents.
 #
 # The short X.Y version.
-version = joblib.__version__
+version = joblibspark.__version__
 # The full version, including alpha/beta/rc tags.
 release = version
 
@@ -230,7 +230,8 @@ html_theme = 'alabaster'
 
 html_theme_options = {
     'logo': 'joblibspark_logo.svg',
-    'github_repo': 'joblib/joblib',
+    'github_user': 'thinkall',
+    'github_repo': 'joblib-spark-fabric',
     'github_button': 'true',
     'link': '#aa560c',
     'show_powered_by': 'false',
@@ -244,17 +245,6 @@ html_theme_options = {
     # "codebgcolor": "#f5efe7",
 }
 
-
-##############################################################################
-# Hack to copy the CHANGES.rst file
-import shutil
-try:
-    shutil.copyfile('../CHANGES.rst', 'CHANGES.rst')
-    shutil.copyfile('../README.rst', 'README.rst')
-except IOError:
-    pass
-    # This fails during the tesing, as the code is ran in a different
-    # directory
 
 numpydoc_show_class_members = False
 

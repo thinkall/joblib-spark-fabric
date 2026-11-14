@@ -20,7 +20,7 @@ Independently maintained Spark backend for joblib, distributed as joblibspark-fa
 
 Fork modifications are documented in CHANGES.rst.
 """
-__version__ = '0.7.0'
+__version__ = '0.7.1'
 
 
 def register_spark():

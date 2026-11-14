@@ -24,8 +24,8 @@
   </style>
 
 
-Joblib: running Python functions as pipeline jobs
-=================================================
+joblibspark-fabric: running joblib tasks on Spark
+===============================================
 
 Introduction
 ------------

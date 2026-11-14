@@ -132,7 +132,8 @@ class SparkDistributedBackend(ParallelBackendBase, AutoBatchingMixin):
             support_stage_scheduling = hasattr(
                 self._spark_context.parallelize([1]), "withResources"
             )
-            warnings.warn("Spark version does not support stage-level scheduling.")
+            if not support_stage_scheduling:
+                warnings.warn("Spark version does not support stage-level scheduling.")
         return support_stage_scheduling
 
     def _create_resource_profile(self,

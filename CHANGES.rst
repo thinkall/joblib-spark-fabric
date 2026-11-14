@@ -1,6 +1,17 @@
 Latest changes
 ===============
 
+Release 0.7.1
+-------------
+
+* Set minimum supported versions to Python 3.13, joblib 1.5.0, and PySpark 4.0.
+* Use one CI matrix for supported versions, without exclusions or legacy jobs.
+* Remove committed review artifacts and simplify fork wording.
+* Add isolated three-worker container integration tests for classic Spark and
+  Spark Connect. Label synthetic GPU-resource tests explicitly as simulations.
+* Avoid a false unsupported-stage-scheduling warning on classic Spark clusters.
+  Strengthen cancellation and distributed failure-recovery assertions.
+
 Release 0.7.0 (joblibspark-fabric)
 ----------------------------------
 

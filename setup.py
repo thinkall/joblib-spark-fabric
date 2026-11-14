@@ -28,8 +28,6 @@ if __name__ == '__main__':
               'Intended Audience :: Education',
               'Operating System :: OS Independent',
               'Programming Language :: Python :: 3',
-              'Programming Language :: Python :: 3.11',
-              'Programming Language :: Python :: 3.12',
               'Programming Language :: Python :: 3.13',
               'Programming Language :: Python :: 3.14',
               'Topic :: Scientific/Engineering',
@@ -38,13 +36,13 @@ if __name__ == '__main__':
           ],
           platforms='any',
           packages=find_packages(include=['joblibspark', 'joblibspark.*']),
-          python_requires='>=3.11,<3.15',
+          python_requires='>=3.13,<3.15',
           install_requires=[
-              'joblib>1.0',
+              'joblib>=1.5.0',
               'packaging',
           ],
           extras_require={
-              'spark': ['pyspark>=3.5,<=4.3.0'],
+              'spark': ['pyspark>=4.0,<=4.3.0'],
               'connect': ['pyspark[connect]>=4.0,<=4.3.0'],
               'test': ['pytest', 'pylint'],
           })

@@ -76,7 +76,7 @@ class TestBasicSparkCluster(unittest.TestCase):
         cls.num_cpus_per_spark_task = 1
         cls.num_gpus_per_spark_task = 1
         gpu_discovery_script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "discover_2_gpu.sh"
+            os.path.dirname(os.path.abspath(__file__)), "discover_simulated_gpus.sh"
         )
 
         cls.spark = (
@@ -121,8 +121,27 @@ class TestBasicSparkCluster(unittest.TestCase):
         assert resource_group.taskResources['cpus'].amount == 1.0
 
 
+@pytest.mark.parametrize("master,has_resources,expected,warning", [
+    ("spark://master:7077", True, True, None),
+    ("spark://master:7077", False, False, "Spark version does not support"),
+    ("local[1]", True, False, "Spark local mode doesn't support"),
+])
+def test_stage_scheduling_warns_only_when_unsupported(master, has_resources, expected, warning):
+    backend = SparkDistributedBackend.__new__(SparkDistributedBackend)
+    backend._is_spark_connect_mode = False
+    rdd = SimpleNamespace(withResources=lambda profile: profile) if has_resources else object()
+    backend._spark_context = SimpleNamespace(master=master, parallelize=lambda _: rdd)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert backend._is_support_stage_scheduling() is expected
+
+    assert len(caught) == (1 if warning else 0)
+    if warning:
+        assert warning in str(caught[0].message)
+
+
 @pytest.mark.parametrize("spark_release,connect_mode,pinned_threads,with_session", [
-    ("3.5.7", False, True, False),
     ("4.0.0", False, True, True),
     ("4.0.0", False, False, False),
     ("4.0.0", True, False, True),
@@ -282,6 +301,49 @@ def test_submission_without_pinned_threads():
         assert backend.submit(lambda: 42).get(timeout=5) == 42
 
 
+@pytest.mark.parametrize("pinned_threads", [False, True])
+def test_classic_submission_sets_job_group_and_resources(pinned_threads):
+    backend = SparkDistributedBackend.__new__(SparkDistributedBackend)
+    context = MagicMock()
+    backend._spark = SimpleNamespace(sparkContext=context)
+    backend._is_spark_connect_mode = False
+    backend._spark_pinned_threads_enabled = pinned_threads
+    backend._is_running = True
+    backend._resource_profile = object()
+    backend._spark_supports_job_cancelling = True
+    backend._job_group = "test-job-group"
+    worker_rdd = context.parallelize.return_value.withResources.return_value
+    mapped_rdd = MagicMock()
+    func = MagicMock(return_value=42)
+
+    def map_task(mapper):
+        serialized = [mapper(0)]
+        mapped_rdd.collect.return_value = serialized
+        mapped_rdd.collectWithJobGroup.return_value = serialized
+        return mapped_rdd
+
+    worker_rdd.map.side_effect = map_task
+    inherit = (lambda session: lambda target: target) if pinned_threads else (lambda target: target)
+    with ThreadPool(1) as pool, \
+            patch("pyspark.inheritable_thread_target", side_effect=inherit):
+        backend._pool = pool
+        assert backend.submit(func).get(timeout=5) == 42
+
+    func.assert_called_once_with()
+    context.parallelize.return_value.withResources.assert_called_once_with(
+        backend._resource_profile)
+    if pinned_threads:
+        context.setLocalProperty.assert_any_call("spark.jobGroup.id", backend._job_group)
+        context.setLocalProperty.assert_any_call("spark.job.description", "joblib spark jobs")
+        mapped_rdd.collect.assert_called_once_with()
+        mapped_rdd.collectWithJobGroup.assert_not_called()
+    else:
+        context.setLocalProperty.assert_not_called()
+        mapped_rdd.collectWithJobGroup.assert_called_once_with(
+            backend._job_group, "joblib spark jobs")
+        mapped_rdd.collect.assert_not_called()
+
+
 @pytest.mark.parametrize("config_attribute", ["_backend_args", "_backend_kwargs"])
 def test_abort_reconfigures_managed_parallel(config_attribute):
     backend = SparkDistributedBackend.__new__(SparkDistributedBackend)
@@ -302,7 +364,7 @@ def test_abort_reconfigures_managed_parallel(config_attribute):
     )
 
 
-@pytest.mark.parametrize("missing_module", ["pyspark", "packaging"])
+@pytest.mark.parametrize("missing_module", ["pyspark", "py4j", "packaging"])
 def test_registration_preserves_import_failure(missing_module):
     missing = ModuleNotFoundError(f"No module named '{missing_module}'", name=missing_module)
     original_import = builtins.__import__
@@ -316,7 +378,7 @@ def test_registration_preserves_import_failure(missing_module):
         with pytest.raises(ImportError) as error:
             joblibspark.register_spark()
 
-    if missing_module == "pyspark":
+    if missing_module in ("pyspark", "py4j"):
         assert error.value.__cause__ is missing
         assert "standalone" in str(error.value).lower()
         assert "managed" in str(error.value).lower()

@@ -1,0 +1,96 @@
+x-node: &node
+  image: joblibspark-cluster-test:local
+  init: true
+
+services:
+  master:
+    <<: *node
+    hostname: master
+    build:
+      context: ../..
+      dockerfile: test/containers/Dockerfile
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.13}
+        SPARK_VERSION: ${SPARK_VERSION:-4.0.0}
+        JOBLIB_REQUIREMENT: ${JOBLIB_REQUIREMENT:-joblib==1.5.0}
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.master.Master
+      - --host
+      - master
+      - --port
+      - "7077"
+      - --webui-port
+      - "8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://master:8080/json/', timeout=5).read()"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 60s
+
+  worker:
+    <<: *node
+    depends_on:
+      master:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        export SPARK_LOCAL_IP="$$(python -c 'import socket; print(socket.gethostbyname(socket.gethostname()))')"
+        export SPARK_LOCAL_HOSTNAME="$$SPARK_LOCAL_IP"
+        exec /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker \
+          --host "$$SPARK_LOCAL_IP" --cores 1 --memory 1g spark://master:7077
+
+  connect:
+    <<: *node
+    hostname: connect
+    depends_on:
+      master:
+        condition: service_healthy
+    command:
+      - /opt/spark/bin/spark-submit
+      - --class
+      - org.apache.spark.sql.connect.service.SparkConnectServer
+      - --master
+      - spark://master:7077
+      - --conf
+      - spark.driver.host=connect
+      - --conf
+      - spark.driver.bindAddress=0.0.0.0
+      - --conf
+      - spark.connect.grpc.binding.address=0.0.0.0
+      - --conf
+      - spark.cores.max=3
+      - --conf
+      - spark.executor.cores=1
+      - --conf
+      - spark.executor.memory=1g
+      - --conf
+      - spark.dynamicAllocation.enabled=false
+      - --conf
+      - spark.sql.adaptive.enabled=false
+      - --conf
+      - spark.task.maxFailures=1
+      - --conf
+      - spark.scheduler.minRegisteredResourcesRatio=1.0
+      - --conf
+      - spark.scheduler.maxRegisteredResourcesWaitingTime=120s
+      - /opt/spark/jars/spark-connect_2.13-${SPARK_VERSION:-4.0.0}.jar
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('connect', 15002), timeout=5).close()"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 120s
+
+  driver:
+    <<: *node
+    hostname: driver
+    environment:
+      TEST_CONTAINER_CLUSTER: "true"
+      TEST_SPARK_CONNECT: ${TEST_SPARK_CONNECT:-false}
+    depends_on:
+      master:
+        condition: service_healthy

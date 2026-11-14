@@ -7,10 +7,9 @@ The Python import namespace remains ``joblibspark``.
 Requirements
 ------------
 
-Use Python 3.11-3.14 and a compatible PySpark release from 3.5 through 4.3.0.
-PySpark 3.5 supports Python 3.11 within this range; PySpark 4.0 supports
-Python 3.11-3.13; PySpark 4.1-4.3 supports Python 3.11-3.14.
-Spark Connect requires PySpark 4.0 or newer.
+Use Python 3.13-3.14, joblib >=1.5.0, and PySpark 4.0 through 4.3.0.
+Classic Spark and Spark Connect are supported. Python 3.14 requires
+PySpark 4.1 or newer and a compatible joblib release.
 
 Installation
 ------------

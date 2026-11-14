@@ -6,24 +6,17 @@ that provides an Apache Spark backend for joblib. Releases are maintained in
 The distribution name is **`joblibspark-fabric`**; the Python namespace remains
 **`joblibspark`**, including `register_spark()` and the `'spark'` backend name.
 
-This is a community fork, not an official Microsoft distribution. The upstream
-Apache-2.0 license and attribution are retained; fork changes are recorded in
+The upstream Apache-2.0 license and attribution are retained; fork changes are recorded in
 [CHANGES.rst](CHANGES.rst).
 
 ## Installation
 
-Requirements: Python 3.11-3.14, joblib >1.0, and PySpark 3.5 through 4.3.0.
-Use a Python version supported by your PySpark release:
+Minimum requirements: Python 3.13, joblib 1.5.0, and PySpark 4.0.
+The tested range currently extends through Python 3.14 and PySpark 4.3.0,
+for both classic Spark and Spark Connect.
 
-| PySpark | Python versions within this fork's support range | Spark Connect |
-| --- | --- | --- |
-| 3.5.x | 3.11 | No |
-| 4.0.x | 3.11-3.13 | Yes |
-| 4.1.x, 4.2.x, 4.3.0 | 3.11-3.14 | Yes |
-
-Older joblib releases are tested on older Python versions. Use a current joblib
-release on newer Python versions; the dependency range does not imply that every
-historical joblib release supports every Python version.
+Use mutually compatible versions: Python 3.14 requires PySpark 4.1 or newer
+and a joblib release that supports Python 3.14.
 
 **Do not install `joblibspark` and `joblibspark-fabric` together:** both provide
 the same import namespace. To migrate an existing environment:
@@ -75,13 +68,35 @@ python -m build
 python -m twine check dist/*
 ```
 
-CI tests each supported Spark release line on Python 3.11, and Python 3.12-3.14
-with Spark 4.3.0, in classic and supported Connect modes. Additional legacy-joblib
-jobs cover Spark 3.5 classic and Spark 4.0 Connect. This is representative coverage,
-not the full Cartesian product of the compatibility table. Integration tests use Java
-17 for Spark 3.5 and Java 21 for Spark 4, and run local Spark clusters;
+CI uses one explicit matrix: Python 3.13 with Spark 4.0-4.3, plus Python 3.14
+with Spark 4.3. The Spark 4.0 baseline pins joblib 1.5.0; other combinations
+use a current joblib >=1.5.0. Every combination runs in classic and Connect modes,
+without exclusions. Integration tests use Java 21 and local Spark clusters;
 the simulated GPU resource tests require Linux.
 To run Connect tests, set `TEST_SPARK_CONNECT=true`.
+
+### Containerized cluster tests
+
+An additional CI job runs one standalone master, three worker containers (one
+single-core executor per worker), and a separate driver. Connect tests also use
+a separate Spark Connect server container. Tests require tasks to rendezvous
+across three distinct executor hostnames, check driver filesystem isolation,
+perform a cross-worker shuffle, and verify joblib failure recovery.
+
+The minimum and newest supported runtime combinations run in both modes. All
+containers share one GitHub runner, so this verifies container/network isolation,
+not separate physical machines or real GPU computation. The existing
+`TestSimulatedGPUResources` tests use synthetic GPU addresses and only verify
+Spark resource scheduling; they do not require or test GPU hardware.
+
+With Docker Compose installed, run the classic minimum-runtime case with:
+
+```bash
+docker compose -f test/containers/compose.yml build master
+docker compose -f test/containers/compose.yml up -d --wait --scale worker=3 master worker
+docker compose -f test/containers/compose.yml run --rm --use-aliases driver
+docker compose -f test/containers/compose.yml down --volumes --remove-orphans
+```
 
 Releases publish to the separate `joblibspark-fabric` project on PyPI using
 Trusted Publishing, without an upstream release or a stored API token:
@@ -91,7 +106,7 @@ Trusted Publishing, without an upstream release or a stored API token:
    owner `thinkall`, repository `joblib-spark-fabric`, workflow `release.yml`, and
    environment `pypi`. Configure approval protection for that GitHub environment.
 2. Update `joblibspark.__version__` and `CHANGES.rst`.
-3. Publish a GitHub release with a matching tag, such as `v0.7.0`.
+3. Publish a GitHub release with a matching tag, such as `v0.7.1`.
    The release workflow checks the version, runs CI, builds the distributions,
    and publishes only after the `pypi` environment is approved.
 

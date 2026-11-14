@@ -125,25 +125,31 @@ class TestSparkCluster(unittest.TestCase):
         import tempfile
         import os
 
-        tmp_dir = tempfile.mkdtemp()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            started = os.path.join(tmp_dir, "started")
+            completed = os.path.join(tmp_dir, "completed")
 
-        def test_fn(x):
-            if x == 0:
-                # make the task-0 fail, then it will cause task 1/2/3 to be canceled.
-                raise RuntimeError("cancel sibling task")
-            else:
+            def test_fn(x):
+                if x == 0:
+                    deadline = time.monotonic() + 60
+                    while not os.path.exists(started) and time.monotonic() < deadline:
+                        time.sleep(0.1)
+                    assert os.path.exists(started), "Sibling never started"
+                    raise RuntimeError("cancel sibling task")
+                with open(started, 'w'):
+                    pass
                 time.sleep(15)
-                # if the task finished successfully, it will write a flag file to tmp dir.
-                with open(os.path.join(tmp_dir, str(x)), 'w'):
+                with open(completed, 'w'):
                     pass
 
-        with pytest.raises(Exception, match="cancel sibling task"):
-            with parallel_backend('spark', n_jobs=2):
-                Parallel()(delayed(test_fn)(i) for i in range(2))
+            with pytest.raises(Exception, match="cancel sibling task"):
+                with parallel_backend('spark'):
+                    Parallel(n_jobs=2, batch_size=1, pre_dispatch=2)(
+                        delayed(test_fn)(i) for i in range(2))
 
-        time.sleep(30)  # wait until we can ensure all task finish or cancelled.
-        # assert all jobs was cancelled, no flag file will be written to tmp dir.
-        assert len(os.listdir(tmp_dir)) == 0
+            assert os.path.exists(started)
+            time.sleep(20)
+            assert not os.path.exists(completed), "Running sibling was not cancelled"
 
 
 @unittest.skipIf(
@@ -152,11 +158,11 @@ class TestSparkCluster(unittest.TestCase):
     "Resource group is only supported since Spark 3.4.0 for legacy Spark mode or "
     "since Spark 4 for Spark Connect mode."
 )
-class TestGPUSparkCluster(unittest.TestCase):
+class TestSimulatedGPUResources(unittest.TestCase):
     @classmethod
     def setup_class(cls):
         gpu_discovery_script_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "discover_2_gpu.sh"
+            os.path.dirname(os.path.abspath(__file__)), "discover_simulated_gpus.sh"
         )
 
         spark_session_builder = (

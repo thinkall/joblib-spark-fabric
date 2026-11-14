@@ -2,3 +2,4 @@ include CHANGES.rst
 include requirements.txt
 include run-tests.sh run-pylint.sh
 recursive-include test *.py *.sh
+recursive-include test/containers Dockerfile *.yml
