@@ -2,7 +2,7 @@ import warnings
 import os
 import builtins
 from multiprocessing.pool import ThreadPool
-from threading import get_ident
+from threading import Event, get_ident
 from types import SimpleNamespace
 from packaging.version import Version
 import pytest
@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import pyspark
+from joblib import Parallel, delayed
 from pyspark.sql import SparkSession
 
 from joblibspark.backend import SparkDistributedBackend
@@ -362,6 +363,45 @@ def test_abort_reconfigures_managed_parallel(config_attribute):
     backend.configure.assert_called_once_with(
         n_jobs=2, parallel=backend.parallel, verbose=1
     )
+
+
+def test_managed_parallel_reuse_discards_prefetched_batches(request):
+    backend = SparkDistributedBackend.__new__(SparkDistributedBackend)
+    backend._pool = None
+    backend._ipython = None
+    backend._spark = SimpleNamespace(sparkContext=MagicMock())
+    backend._is_spark_connect_mode = False
+    backend._spark_pinned_threads_enabled = False
+    backend._resource_profile = None
+    backend._spark_supports_job_cancelling = False
+    backend.effective_n_jobs = lambda n_jobs: n_jobs
+    retrieving = Event()
+    aborting = Event()
+    backend._cancel_all_jobs = MagicMock(side_effect=aborting.set)
+    request.addfinalizer(lambda: backend._pool.terminate() if backend._pool else None)
+
+    backend._spark.sparkContext.parallelize.return_value.map.side_effect = (
+        lambda mapper: SimpleNamespace(collect=lambda: [mapper(0)])
+    )
+
+    def fail():
+        assert retrieving.wait(5)
+        raise ValueError("first batch failed")
+
+    def wait_for_abort():
+        assert aborting.wait(5)
+        return -1
+
+    def retrieve(result, timeout=None):
+        retrieving.set()
+        return result.get(timeout=timeout)
+
+    with patch("pyspark.inheritable_thread_target", side_effect=lambda target: target), \
+            patch.object(backend, "retrieve_result", side_effect=retrieve), \
+            Parallel(backend=backend, n_jobs=2, batch_size=1, pre_dispatch=1) as parallel:
+        with pytest.raises(ValueError, match="first batch failed"):
+            parallel([delayed(fail)(), delayed(wait_for_abort)(), delayed(int)(-2)])
+        assert parallel(delayed(int)(value) for value in [1, 2]) == [1, 2]
 
 
 @pytest.mark.parametrize("missing_module", ["pyspark", "py4j", "packaging"])

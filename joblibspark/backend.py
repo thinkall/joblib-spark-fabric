@@ -19,6 +19,7 @@ The joblib spark backend implementation.
 """
 import atexit
 import logging
+import queue
 import warnings
 from multiprocessing.pool import ThreadPool
 import uuid
@@ -229,6 +230,8 @@ class SparkDistributedBackend(ParallelBackendBase, AutoBatchingMixin):
             atexit.unregister(self._pool.close)
             self._pool.terminate()
             self._pool = None
+        # Joblib retains prefetched, unsubmitted batches when a call fails.
+        self.parallel._ready_batches = queue.Queue()  # pylint: disable=protected-access
         if ensure_ready:
             backend_args = getattr(self.parallel, "_backend_kwargs",
                                    getattr(self.parallel, "_backend_args", {}))

@@ -11,6 +11,8 @@ Release 0.7.1
   Spark Connect. Label synthetic GPU-resource tests explicitly as simulations.
 * Avoid a false unsupported-stage-scheduling warning on classic Spark clusters.
   Strengthen cancellation and distributed failure-recovery assertions.
+* Discard prefetched batches after failures so reused Parallel instances cannot
+  execute tasks left over from an aborted call.
 
 Release 0.7.0 (joblibspark-fabric)
 ----------------------------------
