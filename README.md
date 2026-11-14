@@ -69,7 +69,7 @@ python -m twine check dist/*
 ```
 
 CI uses one explicit matrix: Python 3.13 with Spark 4.0-4.3, plus Python 3.14
-with Spark 4.3. The Spark 4.0 baseline pins joblib 1.5.0; other combinations
+with Spark 4.2-4.3. The Spark 4.0 baseline pins joblib 1.5.0; other combinations
 use a current joblib >=1.5.0. Every combination runs in classic and Connect modes,
 without exclusions. Integration tests use Java 21 and local Spark clusters;
 the simulated GPU resource tests require Linux.
@@ -83,8 +83,9 @@ a separate Spark Connect server container. Tests require tasks to rendezvous
 across three distinct executor hostnames, check driver filesystem isolation,
 perform a cross-worker shuffle, and verify joblib failure recovery.
 
-The minimum and newest supported runtime combinations run in both modes. All
-containers share one GitHub runner, so this verifies container/network isolation,
+Container CI covers Python 3.13 with Spark 4.0.0 and Python 3.14 with Spark 4.2.0
+and 4.3.0, in both modes. All containers share one GitHub runner, so this verifies
+container/network isolation,
 not separate physical machines or real GPU computation. The existing
 `TestSimulatedGPUResources` tests use synthetic GPU addresses and only verify
 Spark resource scheduling; they do not require or test GPU hardware.

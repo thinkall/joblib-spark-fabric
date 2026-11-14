@@ -20,6 +20,7 @@ jobs:
           - {python: "3.13", spark: "4.1.*", joblib: ">=1.5.0"}
           - {python: "3.13", spark: "4.2.*", joblib: ">=1.5.0"}
           - {python: "3.13", spark: "4.3.0", joblib: ">=1.5.0"}
+          - {python: "3.14", spark: "4.2.*", joblib: ">=1.5.0"}
           - {python: "3.14", spark: "4.3.0", joblib: ">=1.5.0"}
         connect: [false, true]
     name: Python ${{ matrix.runtime.python }}, Spark ${{ matrix.runtime.spark }}, joblib ${{ matrix.runtime.joblib }}, Connect ${{ matrix.connect }}
@@ -53,6 +54,7 @@ jobs:
       matrix:
         runtime:
           - {python: "3.13", spark: "4.0.0", joblib: "joblib==1.5.0"}
+          - {python: "3.14", spark: "4.2.0", joblib: "joblib>=1.5.0"}
           - {python: "3.14", spark: "4.3.0", joblib: "joblib>=1.5.0"}
         connect: [false, true]
     name: Containers Python ${{ matrix.runtime.python }}, Spark ${{ matrix.runtime.spark }}, Connect ${{ matrix.connect }}
